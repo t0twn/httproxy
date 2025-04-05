@@ -87,7 +87,7 @@ def handle_request():
     upstream_headers = dict(resp.headers)
     response_headers = {}
     for header in upstream_headers:
-        if header.lower() in ['content-length', 'connection', 'content-encoding']:
+        if header.lower() in ['content-length', 'connection', 'content-encoding', 'transfer-encoding']:
             continue
         response_headers[header] = upstream_headers[header]
 
