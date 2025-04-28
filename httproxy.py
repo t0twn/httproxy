@@ -206,8 +206,13 @@ def main():
         required=True,
         help="Upstream to be proxied",
     )
+    parser.add_argument(
+        "--host",
+        "-o",
+        help="Host to be accessed",
+    )
     ARGS = parser.parse_args()
-    GUI = "https://{}:{}".format(ARGS.bind, ARGS.port[0])
+    GUI = "https://{}:{}".format(ARGS.host or ARGS.bind, ARGS.port[0])
     check_args()
 
     # If supplied cert use that
