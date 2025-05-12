@@ -20,7 +20,7 @@ function check(){
 }
 
 function start(){
-    cmd="python httproxy.py"
+    cmd="httproxy"
     for index in "${!upstreams[@]}"; do
         upstream=${upstreams[$index]}
         listen_port=${listen_ports[$index]}
