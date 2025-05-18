@@ -3,6 +3,7 @@ declare upstreams
 declare listen_ports
 declare listen_addr
 declare listen_host
+declare using_x_real_ip
 
 
 function init(){
@@ -10,6 +11,7 @@ function init(){
     read -ra listen_ports <<< "$LISTEN_PORTS"
     listen_addr=$LISTEN_ADDR
     listen_host=$LISTEN_HOST
+    using_x_real_ip=$USING_X_REAL_IP
 }
 
 function check(){
@@ -28,6 +30,7 @@ function start(){
     done
     cmd+=" -b $LISTEN_ADDR"
     [ -z $listen_host ] || cmd+=" -o $listen_host"
+    [ -z $using_x_real_ip ] || cmd+=" -x"
     echo "Start using cmd: \"$cmd\""
     eval $cmd
 }
