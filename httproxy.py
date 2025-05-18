@@ -6,6 +6,9 @@ import tempfile
 import random
 import datetime
 import threading
+import logging
+import urllib3
+from ssl import SSLError
 from collections import OrderedDict
 
 import requests
@@ -62,6 +65,14 @@ class WhiteListBasicAuth(BasicAuth):
                 WHITE_LIST[remote_addr] = datetime.datetime.now()
 
         return authenticated
+
+
+class QuietWSGIServer(WSGIServer):
+    def wrap_socket_and_handle(self, *args, **kwargs):
+        try:
+            super().wrap_socket_and_handle(*args, **kwargs)
+        except SSLError as e:
+            logging.error("[TLS] SSL handshake failed ignored: %s", e)
 
 
 def set_cors_headers(response_headers, request_headers):
@@ -173,9 +184,13 @@ def auth_app():
 
 
 def run_app():
+
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
     auth_app()
+
     for port in ARGS.port:
-        https_server = WSGIServer((ARGS.bind, port), APP, certfile=CERT)
+        https_server = QuietWSGIServer((ARGS.bind, port), APP, certfile=CERT)
         https_server.start()
 
     while True:
