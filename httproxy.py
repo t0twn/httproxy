@@ -32,28 +32,36 @@ WHITE_LIST = OrderedDict()
 WHITE_LIST_SIZE = 5
 WHITE_TIME_DELTA = datetime.timedelta(hours=1)
 
+ENV_HTTPROXY_AUTH_USERNAME = "HTTPROXY_AUTH_USERNAME"
+ENV_HTTPROXY_AUTH_PASSWORD = "HTTPROXY_AUTH_PASSWORD"
+DEFAULT_HTTPROXY_AUTH_USERNAME = "httproxy"
+DEFAULT_HTTPROXY_AUTH_PASSWORD = "password"
+
 
 class WhiteListBasicAuth(BasicAuth):
 
     def authenticate(self):
-        if request.remote_addr in WHITE_LIST:
-            if (datetime.datetime.now() - WHITE_LIST[request.remote_addr]) < WHITE_TIME_DELTA:
-                WHITE_LIST[request.remote_addr] = datetime.datetime.now()
+
+        remote_addr = request.remote_addr
+        if ARGS.using_x_real_ip:
+            remote_addr = request.headers.get("X-Real-Ip", remote_addr)
+
+        if remote_addr in WHITE_LIST:
+            if (datetime.datetime.now() - WHITE_LIST[remote_addr]) < WHITE_TIME_DELTA:
+                WHITE_LIST[remote_addr] = datetime.datetime.now()
                 return True
             else:
                 with LOCK:
-                    del WHITE_LIST[request.remote_addr]
+                    del WHITE_LIST[remote_addr]
+
         authenticated = super().authenticate()
         if authenticated:
             with LOCK:
                 if len(WHITE_LIST) >= WHITE_LIST_SIZE:
                     WHITE_LIST.popitem(last=False)
-                WHITE_LIST[request.remote_addr] = datetime.datetime.now()
-        return authenticated
+                WHITE_LIST[remote_addr] = datetime.datetime.now()
 
-APP.config["BASIC_AUTH_USERNAME"] = os.environ.get("HTTPROXY_AUTH_USERNAME", "httproxy")
-APP.config["BASIC_AUTH_PASSWORD"] = os.environ.get("HTTPROXY_AUTH_PASSWORD", "password")
-BASIC_AUTH_APP = WhiteListBasicAuth(APP)
+        return authenticated
 
 
 def set_cors_headers(response_headers, request_headers):
@@ -99,7 +107,6 @@ def handle_request():
 
 @APP.route('/', defaults={'path': ''})
 @APP.route('/<path:path>', methods=['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'CONNECT', 'OPTIONS', 'TRACE', 'PATCH'])
-@BASIC_AUTH_APP.required
 def catch_all(path):
     return handle_request()
 
@@ -153,7 +160,20 @@ def check_args():
         UPSTREAM_MAP[port] = ARGS.upstream[i]
 
 
+def auth_app():
+
+    auth = WhiteListBasicAuth(APP)
+
+    APP.config["BASIC_AUTH_USERNAME"] = os.environ.get(ENV_HTTPROXY_AUTH_USERNAME, DEFAULT_HTTPROXY_AUTH_USERNAME)
+    APP.config["BASIC_AUTH_PASSWORD"] = os.environ.get(ENV_HTTPROXY_AUTH_PASSWORD, DEFAULT_HTTPROXY_AUTH_PASSWORD)
+
+    for endpoint, view_func in APP.view_functions.items():
+        if endpoint != 'static':
+            APP.view_functions[endpoint] = auth.required(view_func)
+
+
 def run_app():
+    auth_app()
     for port in ARGS.port:
         https_server = WSGIServer((ARGS.bind, port), APP, certfile=CERT)
         https_server.start()
@@ -162,10 +182,8 @@ def run_app():
         gevent.sleep(60)
 
 
-def main():
-
+def parse_args():
     global ARGS
-    global CERT
     global GUI
 
     parser = argparse.ArgumentParser()
@@ -212,9 +230,25 @@ def main():
         "-o",
         help="Host to be accessed",
     )
+    parser.add_argument(
+        "-x",
+        dest="using_x_real_ip",
+        action="store_true",
+        default=False,
+        help="Using X-Real-Ip in header as real client IP. "
+        "Caution: This feature must ONLY be enabled when a reverse proxy is in place and setting the required header.",
+    )
     ARGS = parser.parse_args()
     GUI = "https://{}:{}".format(ARGS.host or ARGS.bind, ARGS.port[0])
     check_args()
+
+
+def main():
+
+    global ARGS
+    global CERT
+
+    parse_args()
 
     # If supplied cert use that
     if ARGS.existing_cert is not None:
