@@ -6,6 +6,13 @@ declare listen_host
 declare using_x_real_ip
 
 
+trap term SIGTERM
+
+function term(){
+    echo "Exiting on SIGTERM"
+    exit 0
+}
+
 function init(){
     read -ra upstreams <<< "$UPSTREAMS"
     read -ra listen_ports <<< "$LISTEN_PORTS"
@@ -32,7 +39,8 @@ function start(){
     [ -z $listen_host ] || cmd+=" -o $listen_host"
     [ -z $using_x_real_ip ] || cmd+=" -x"
     echo "Start using cmd: \"$cmd\""
-    eval $cmd
+    eval $cmd &
+    wait $!
 }
 
 function main(){
